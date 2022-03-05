@@ -156,8 +156,10 @@ class JointIntentSlotDetector():
 
 
 if __name__ == '__main__':
-    model_path = '/home/pengyu/workspace/saved_models/jointbert-SMP2019/model/model_epoch2'
-    tokenizer_path = '/home/pengyu/workspace/saved_models/jointbert-SMP2019/tokenizer/'
+    # model_path = '/home/pengyu/workspace/saved_models/jointbert-SMP2019/model/model_epoch2'
+    # tokenizer_path = '/home/pengyu/workspace/saved_models/jointbert-SMP2019/tokenizer/'
+    model_path = 'bert-base-chinese'
+    tokenizer_path = 'bert-base-chinese'
     intent_path = 'data/SMP2019/intent_labels.txt'
     slot_path = 'data/SMP2019/slot_labels.txt'
     model = JointIntentSlotDetector.from_pretrained(
