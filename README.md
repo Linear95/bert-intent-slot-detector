@@ -9,7 +9,7 @@
 
 ## 模型训练
 
-### 数据格式
+### 数据准备
 模型的训练主要依赖于三方面的数据：
 
 1. 训练数据：训练数据以json格式给出，每条数据包括三个关键词：`text`表示待检测的文本，`intent`代表文本的类别标签，`slots`是文本中包括的所有槽位以及对应的槽值，以字典形式给出。在`data/`路径下，给出了SMP2019数据集作为参考，样例如下：
@@ -41,3 +41,29 @@ B_ingredient
 ...
 ```
 
+### 训练过程
+在数据准备完成后，可以使用以下命令进行模型训练，这里我们选择在`bert-base-chinese`预训练模型基础上进行finetune：
+```bash
+python train.py\
+       --cuda_devices 0\
+       --tokenizer_path "bert-base-chinese"\
+       --model_path "bert-base-chinese"\
+       --train_data_path "path/to/data/train.json"\
+       --intent_label_path "path/to/data/intent_labels.txt"\
+       --slot_label_path "path/to/data/slot_labels.txt"\
+       --save_dir "/path/to/saved_model/"\
+       --batch_size 64\
+       --train_epochs 5
+```
+
+## 意图与槽位预测
+训练结束后，我们通过在`JointIntentSlotDetector`类中加载训练好的模型进行意图与槽位预测。
+```python
+model = JointIntentSlotDetector.from_pretrained(
+    model_path='path/to/saved_model/model',
+    tokenizer_path='path/to/saved_model/tokenizer/',
+    intent_label_path='path/to/data/intent_labels.txt'
+    slot_label_path='path/to/data/slot_labels.txt'
+)
+print(model.detect('西红柿的做法是什么'))
+```
