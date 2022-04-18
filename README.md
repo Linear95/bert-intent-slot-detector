@@ -1,6 +1,6 @@
 # 基于BERT的意图和槽位联合识别模块
 
-意图识别和槽位填充是对话系统中的基础任务。本仓库实现了一个基于BERT的意图（intent）和槽位（slots）联合预测模块。想法上实际与JoinBERT类似，利用 `[CLS]` token对应的last hidden state去预测整句话的intent，并利用句子token的last hidden states做序列标注，找出包含slot values的token。你可以自定义自己的意图和槽位标签，并提供自己的数据，通过下述流程训练自己的模型，并在`JointIntentSlotDetector`类中加载训练好的模型直接进行意图和槽值预测。
+意图识别和槽位填充是对话系统中的基础任务。本仓库实现了一个基于BERT的意图（intent）和槽位（slots）联合预测模块。想法上实际与[JoinBERT](https://arxiv.org/abs/1902.10909)类似，利用 `[CLS]` token对应的last hidden state去预测整句话的intent，并利用句子token的last hidden states做序列标注，找出包含slot values的token。你可以自定义自己的意图和槽位标签，并提供自己的数据，通过下述流程训练自己的模型，并在`JointIntentSlotDetector`类中加载训练好的模型直接进行意图和槽值预测。
 
 ## 运行环境
 - Pytorch 1.10
