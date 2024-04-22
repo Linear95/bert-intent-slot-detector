@@ -1,5 +1,8 @@
 import os
 import argparse
+import json
+
+import numpy as np
 
 import torch
 from torch.utils.data import DataLoader
@@ -12,6 +15,52 @@ from datasets import IntentSlotDataset
 from models import JointBert
 from tools import save_module
 
+from detector import JointIntentSlotDetector
+
+
+def evaluate_model(args, model, tokenizer, test_data, intent_dict, slot_dict):
+
+    def calculate_slot_precision(p_slots, o_slots):
+        results = []
+        for slot_name, slot_value_list in p_slots.items():
+            for slot_value in slot_value_list:
+                results.append(float(slot_name in o_slots and slot_value in o_slots[slot_name]))
+                
+        if len(results) == 0:
+            return 1.
+        return np.mean(results)
+
+    def filter_slots(text, slots):
+        outputs = {}
+        for slot_name, slot_value_list in slots.items():
+            output_value_list = []
+            for slot_value in slot_value_list:
+                if slot_value in text:
+                    output_value_list.append(slot_value)
+            if len(output_value_list) > 0:
+                outputs[slot_name] = output_value_list
+        return outputs
+                           
+    detector = JointIntentSlotDetector(
+        model=model,
+        tokenizer=tokenizer,
+        intent_dict=intent_dict,
+        slot_dict=slot_dict
+    )
+
+    intent_acc_results = []
+    slot_precision_results = []
+    slot_recall_results = []
+    for item in test_data:
+        outputs = detector.detect(item['text'])
+        label_slots = filter_slots(item['text'], item['slots'])
+        
+        intent_acc_results.append(float(outputs['intent'] == item['intent']))
+        slot_precision_results.append(calculate_slot_precision(outputs['slots'], label_slots))
+        slot_recall_results.append(calculate_slot_precision(label_slots, outputs['slots']))
+        
+    return np.mean(intent_acc_results), np.mean(slot_precision_results), np.mean(slot_recall_results)
+                                      
     
 
 def train(args):
@@ -31,7 +80,9 @@ def train(args):
         tokenizer=tokenizer
     )
 
-    # model_config = BertConfig.from_pretrained(args.model_path)
+    with open(args.test_data_path, 'r') as f:
+        test_data = json.load(f)
+
 
     #-----------load model-----------
     model = JointBert.from_pretrained(
@@ -39,13 +90,10 @@ def train(args):
         slot_label_num = dataset.slot_label_num,
         intent_label_num = dataset.intent_label_num
     )
+    print(model)
     model = model.to(device).train()
-    #print(model)
     save_module(model, args.save_dir, module_name='model', additional_name="epoch0")
-
-
-        
-
+     
     dataloader = DataLoader(
         dataset,
         shuffle=True,
@@ -57,7 +105,7 @@ def train(args):
         total_steps = args.max_training_steps
     else:
         total_steps = len(dataset) * args.train_epochs // args.gradient_accumulation_steps // args.batch_size
-    #print(len(dataset))
+        
 
     print('calculated total optimizer update steps : {}'.format(total_steps))
 
@@ -87,11 +135,7 @@ def train(args):
         for batch in dataloader:
             step += 1
             input_ids, intent_labels, slot_labels = batch
-            #inputs = tokenizer(text)
-            # print('input_ids', input_ids)
-            # print('intent_labels', intent_labels)
-            # print('slot_labels', slot_labels)
-
+        
             outputs = model(
                 input_ids=torch.tensor(input_ids).long().to(device),
                 intent_labels=torch.tensor(intent_labels).long().to(device),
@@ -121,6 +165,7 @@ def train(args):
                 if args.saving_steps > 0 and update_steps % args.saving_steps == 0:
                 
                     save_module(model, args.save_dir, module_name='model', additional_name="model_step{}".format(update_steps))
+                    
 
         if args.saving_epochs > 0 and (epoch+1) % args.saving_epochs == 0:
             save_module(model, args.save_dir, module_name='model', additional_name="model_epoch{}".format(epoch))
@@ -129,6 +174,17 @@ def train(args):
         if update_steps > total_steps:
             break
 
+
+        intent_acc, slot_prec, slot_recall = evaluate_model(
+            args=args,
+            model=model,
+            tokenizer=tokenizer,
+            test_data=test_data,
+            intent_dict=dataset.intent_label_dict,
+            slot_dict=dataset.slot_label_dict
+        )
+        print('*****evaluation results*****')
+        print('intent acc: {}; slot prec: {}; slot_recall: {}'.format(intent_acc, slot_prec, slot_recall))
 
 
                                            
@@ -147,6 +203,7 @@ if __name__ == '__main__':
 
     # data parameters
     parser.add_argument("--train_data_path", type=str, default='path/to/data.json',  help="training data path")
+    parser.add_argument("--test_data_path", type=str, default='path/to/data.json',  help="testing data path")
     parser.add_argument("--slot_label_path", type=str, default='data/slot_labels.txt',  help="slot label path")
     parser.add_argument("--intent_label_path", type=str, default='data/intent_labels.txt',  help="intent label path")
 
@@ -154,8 +211,9 @@ if __name__ == '__main__':
     parser.add_argument("--save_dir", type=str, default='path/to/save/model',  help="directory to save the model")
     parser.add_argument("--max_training_steps", type=int, default=0, help = 'max training step for optimizer, if larger than 0')
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="number of updates steps to accumulate before performing a backward() pass.")
-    parser.add_argument("--saving_steps", type=int, default=1000, help="parameter update step number to save model")
-    parser.add_argument("--logging_steps", type=int, default=100, help="parameter update step number to print logging info.")
+    parser.add_argument("--saving_steps", type=int, default=300, help="parameter update step number to save model")
+    parser.add_argument("--logging_steps", type=int, default=10, help="parameter update step number to print logging info.")
+    parser.add_argument("--eval_steps", type=int, default=10, help="parameter update step number to print logging info.")
     parser.add_argument("--saving_epochs", type=int, default=1, help="parameter update epoch number to save model")
     
     parser.add_argument("--batch_size", type=int, default=128, help = 'training data batch size')
@@ -166,9 +224,7 @@ if __name__ == '__main__':
     parser.add_argument("--warmup_steps", type=int, default=0, help="warmup step number")
     parser.add_argument("--weight_decay", type=float, default=0.0, help="weight decay rate")
     parser.add_argument("--max_grad_norm", type=float, default=1.0, help="maximum norm for gradients")
-    
-
-    
+        
     args = parser.parse_args()
 
     train(args)
