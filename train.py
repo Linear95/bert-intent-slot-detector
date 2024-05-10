@@ -184,7 +184,7 @@ def train(args):
             slot_dict=dataset.slot_label_dict
         )
         print('*****evaluation results*****')
-        print('intent acc: {}; slot prec: {}; slot_recall: {}'.format(intent_acc, slot_prec, slot_recall))
+        print('intent accuracy: {}; slot precision: {}; slot recall: {}'.format(intent_acc, slot_prec, slot_recall))
 
 
                                            
